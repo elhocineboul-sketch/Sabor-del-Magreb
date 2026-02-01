@@ -102,25 +102,24 @@ export const getMenuItemsByCategory = async (category: string): Promise<MenuItem
   return (data as any) || [];
 };
 
-export const createOrder = async (order: any): Promise<Order | null> => {
-  // Map App (camelCase) to DB (snake_case)
-  const dbOrder = {
+export const createOrder = async (order: any): Promise<any | null> => {
+  const orderData = {
     id: order.id,
-    user_id: order.user_id || order.userId || null,
     customer: order.customer,
-    items: order.items,
+    items: JSON.stringify(order.items), // تحويل إلى نص
     total: order.total,
     status: order.status,
     date: order.date,
-    payment: order.payment,
-    type: order.type,
+    payment: order.payment || 'Cash',
+    type: order.type || 'delivery',
     confirmation_code: order.confirmationCode,
+    user_id: order.user_id,
     delivery_info: order.deliveryInfo
   };
 
   const { data, error } = await supabase
     .from('orders')
-    .insert([dbOrder])
+    .insert([orderData])
     .select()
     .single();
   
@@ -129,27 +128,40 @@ export const createOrder = async (order: any): Promise<Order | null> => {
     return null;
   }
   
-  // Map back to App types if needed, though usually strict type matching isn't required for success check
-  return data as any;
+  return data;
 };
 
 export const getOrders = async (): Promise<Order[]> => {
   const { data, error } = await supabase
     .from('orders')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('date', { ascending: false });
   
   if (error) {
     console.error('Error fetching orders:', error);
     return [];
   }
   
-  // Map DB (snake_case) to App (camelCase)
-  return (data || []).map((o: any) => ({
-    ...o,
-    confirmationCode: o.confirmation_code,
-    deliveryInfo: o.delivery_info
-  })) as Order[];
+  // Map DB to App (handling both cases for robustness)
+  return (data || []).map((o: any) => {
+    let parsedItems = o.items;
+    // Try to parse items if string, to support the new JSON.stringify behavior in createOrder
+    if (typeof o.items === 'string' && (o.items.startsWith('[') || o.items.startsWith('{'))) {
+        try {
+            parsedItems = JSON.parse(o.items);
+        } catch (e) {
+            // Ignore parse error, treat as string
+        }
+    }
+
+    return {
+      ...o,
+      items: parsedItems,
+      confirmationCode: o.confirmation_code || o.confirmationcode,
+      deliveryInfo: o.delivery_info || o.deliveryinfo,
+      user_id: o.user_id || o.userid
+    };
+  }) as Order[];
 };
 
 export const getProducts = async () => {
@@ -167,7 +179,7 @@ export const getSliderItems = async () => {
   const { data, error } = await supabase
     .from('slider_items')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('id', { ascending: false });
   if (error) {
     console.error('Error fetching slider items:', error);
     return [];
