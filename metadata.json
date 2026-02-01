@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Sabor del Magreb",
+  "description": "Un sitio web moderno de comida rápida que fusiona los sabores marroquíes con un servicio ágil. Cuenta con pedidos en línea, seguimiento de pedidos y un asistente de menú impulsado por IA.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
