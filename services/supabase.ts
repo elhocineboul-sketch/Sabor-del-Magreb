@@ -105,15 +105,17 @@ export const getMenuItemsByCategory = async (category: string): Promise<MenuItem
 export const createOrder = async (order: any): Promise<any | null> => {
   const orderData = {
     id: order.id,
-    customer: order.customer,
-    items: JSON.stringify(order.items), // تحويل إلى نص
-    total: order.total,
+    user_id: order.user_id,
+    user_name: order.customer, // Mapped from customer
+    items: JSON.stringify(order.items),
+    subtotal: order.total, // Mapped from total
     status: order.status,
-    date: order.date,
+    // created_at is automatic, so date is omitted
+    
+    // Additional fields required for app functionality
     payment: order.payment || 'Cash',
     type: order.type || 'delivery',
     confirmation_code: order.confirmationCode,
-    user_id: order.user_id,
     delivery_info: order.deliveryInfo
   };
 
@@ -135,18 +137,18 @@ export const getOrders = async (): Promise<Order[]> => {
   const { data, error } = await supabase
     .from('orders')
     .select('*')
-    .order('date', { ascending: false });
+    .order('created_at', { ascending: false }); // Changed from date to created_at
   
   if (error) {
     console.error('Error fetching orders:', error);
     return [];
   }
   
-  // Map DB to App (handling both cases for robustness)
+  // Map DB to App types
   return (data || []).map((o: any) => {
     let parsedItems = o.items;
-    // Try to parse items if string, to support the new JSON.stringify behavior in createOrder
-    if (typeof o.items === 'string' && (o.items.startsWith('[') || o.items.startsWith('{'))) {
+    // Try to parse items if string
+    if (typeof o.items === 'string') {
         try {
             parsedItems = JSON.parse(o.items);
         } catch (e) {
@@ -157,6 +159,11 @@ export const getOrders = async (): Promise<Order[]> => {
     return {
       ...o,
       items: parsedItems,
+      // Map DB columns back to App properties
+      customer: o.user_name || o.customer,
+      total: o.subtotal || o.total,
+      date: o.created_at ? new Date(o.created_at).toLocaleString() : o.date,
+      
       confirmationCode: o.confirmation_code || o.confirmationcode,
       deliveryInfo: o.delivery_info || o.deliveryinfo,
       user_id: o.user_id || o.userid
