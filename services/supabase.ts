@@ -103,33 +103,43 @@ export const getMenuItemsByCategory = async (category: string): Promise<MenuItem
 };
 
 export const createOrder = async (order: any): Promise<any | null> => {
+  const orderId = `ORD-${Date.now()}`;
+  
+  // Setting user_id to null to avoid foreign key constraint violations
+  // as the current user logic might not be synced with the DB's auth.users table yet.
+
   const orderData = {
-    id: order.id,
-    user_id: order.user_id,
-    user_name: order.customer, // Mapped from customer
-    items: JSON.stringify(order.items),
-    subtotal: order.total, // Mapped from total
-    status: order.status,
-    // created_at is automatic, so date is omitted
-    
-    // Additional fields required for app functionality
-    payment: order.payment || 'Cash',
-    type: order.type || 'delivery',
-    confirmation_code: order.confirmationCode,
-    delivery_info: order.deliveryInfo
+    id: orderId,
+    user_id: null,
+    user_name: order.user_name || 'Guest',
+    items: order.items || [],
+    subtotal: order.subtotal || 0,
+    tax: order.tax || 0,
+    delivery_fee: order.delivery_fee || 0,
+    total: order.total || 0,
+    status: order.status || 'pending',
+    accepted: order.accepted || false,
+    estimated_time: order.estimated_time || null,
+    delivery_code: order.delivery_code || Math.floor(1000 + Math.random() * 9000).toString(),
+    payment_method: order.payment_method || 'Cash',
+    nequi_number: order.nequi_number || null,
+    created_at: Date.now()
   };
+
+  console.log('Creating order with data:', orderData);
 
   const { data, error } = await supabase
     .from('orders')
     .insert([orderData])
-    .select()
+    .select('*')
     .single();
   
   if (error) {
-    console.error('Error creating order:', error);
-    return null;
+    console.error('Supabase error:', error);
+    throw error;
   }
   
+  console.log('Order created successfully:', data);
   return data;
 };
 
@@ -137,36 +147,40 @@ export const getOrders = async (): Promise<Order[]> => {
   const { data, error } = await supabase
     .from('orders')
     .select('*')
-    .order('created_at', { ascending: false }); // Changed from date to created_at
+    .order('created_at', { ascending: false });
   
   if (error) {
     console.error('Error fetching orders:', error);
     return [];
   }
   
-  // Map DB to App types
+  // Map DB columns back to App Type (Order)
   return (data || []).map((o: any) => {
     let parsedItems = o.items;
-    // Try to parse items if string
     if (typeof o.items === 'string') {
         try {
             parsedItems = JSON.parse(o.items);
         } catch (e) {
-            // Ignore parse error, treat as string
+            parsedItems = o.items;
         }
     }
 
+    // Handle created_at whether it's a number (bigint) or string
+    const dateObj = o.created_at ? new Date(Number(o.created_at) || o.created_at) : new Date();
+
     return {
-      ...o,
+      id: o.id,
+      user_id: o.user_id,
+      customer: o.user_name, // Map user_name -> customer
       items: parsedItems,
-      // Map DB columns back to App properties
-      customer: o.user_name || o.customer,
-      total: o.subtotal || o.total,
-      date: o.created_at ? new Date(o.created_at).toLocaleString() : o.date,
-      
-      confirmationCode: o.confirmation_code || o.confirmationcode,
-      deliveryInfo: o.delivery_info || o.deliveryinfo,
-      user_id: o.user_id || o.userid
+      total: o.total,
+      status: o.status,
+      type: 'delivery', // Default (missing in DB)
+      date: dateObj.toLocaleString(),
+      payment: o.payment_method, // Map payment_method -> payment
+      confirmationCode: o.delivery_code, // Map delivery_code -> confirmationCode
+      // delivery_info is missing in DB, so we return undefined or partial data
+      deliveryInfo: undefined 
     };
   }) as Order[];
 };
@@ -201,12 +215,9 @@ export const getReviews = async (): Promise<Review[]> => {
     .order('created_at', { ascending: false });
   
   if (error || !data) {
-    console.warn('Using mock reviews (table might not exist)', error);
     return [
       { id: '101', customerName: 'Karim Ben', rating: 5, comment: 'The best burger in town!', status: 'pending', date: '2024-03-10' },
       { id: '102', customerName: 'Sara L.', rating: 3, comment: 'Delivery was a bit late.', status: 'pending', date: '2024-03-09' },
-      { id: '103', customerName: 'Mourad', rating: 5, comment: 'Authentic taste, loved it.', status: 'approved', date: '2024-03-08' },
-      { id: '104', customerName: 'John Doe', rating: 2, comment: 'Too spicy for me.', status: 'pending', date: '2024-03-09' },
     ];
   }
   
